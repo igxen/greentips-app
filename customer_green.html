@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Green Tips</title>
+    <style>
+        :root { --bg: #000; --card: rgba(20, 20, 20, 0.95); --accent: #00ff41; --vip: #ffd700; --single: #00e5ff; --text: #fff; --muted: #888; --border: #222; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body { background: var(--bg); color: var(--text); display: flex; justify-content: center; overflow-x: hidden; }
+        .app { width: 100%; max-width: 450px; min-height: 100vh; position: relative; padding-bottom: 90px; border: 1px solid var(--border); }
+        header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: rgba(0,0,0,0.95); z-index: 100; }
+        .logo { font-size: 1.3rem; font-weight: 900; letter-spacing: 1px; }
+        .logo span { color: var(--accent); }
+        .page { display: none; padding: 20px; animation: fadeIn 0.3s ease; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .ticket { background: var(--card); border-radius: 15px; margin-bottom: 20px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+        .ticket-header { background: rgba(255,255,255,0.03); padding: 10px 15px; display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); border-bottom: 1px solid var(--border); }
+        .match-row { padding: 12px 15px; border-bottom: 1px solid #1a1a1a; position: relative; min-height: 50px; }
+        .m-name { font-size: 0.95rem; font-weight: bold; display: block; padding-right: 50px; }
+        .m-pick { color: var(--accent); font-weight: bold; font-size: 0.85rem; }
+        .m-odds { position: absolute; right: 15px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: bold; }
+        .total-odds-bar { background: rgba(0,255,65,0.08); padding: 10px 15px; text-align: right; font-weight: 900; border-top: 1px dashed var(--border); }
+        .total-odds-bar span { color: var(--accent); }
+
+        .lock-box { position: absolute; top: 35px; left: 0; width: 100%; height: calc(100% - 35px); background: #0a0a0a; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; text-align: center; }
+        .vip-odds-preview { color: var(--vip); font-size: 1.4rem; font-weight: 900; margin-bottom: 5px; }
+
+        nav { position: fixed; bottom: 0; width: 100%; max-width: 450px; background: rgba(10,10,10,0.98); display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid var(--border); z-index: 1000; }
+        .nav-link { color: var(--muted); font-size: 0.65rem; font-weight: bold; cursor: pointer; text-transform: uppercase; }
+        .nav-link.active { color: var(--accent); }
+    </style>
+</head>
+<body>
+<div class="app">
+    <header><div class="logo">GREEN<span>TIPS</span></div></header>
+
+    <div id="free-page" class="page active"><div id="free-list"></div></div>
+    <div id="single-page" class="page"><div id="single-list"></div></div>
+    <div id="vip-page" class="page"><div id="vip-list"></div></div>
+    <div id="archive-page" class="page"><div id="archive-list"></div></div>
+
+    <nav>
+        <div class="nav-link active" onclick="showPage('free-page', this)">Free</div>
+        <div class="nav-link" onclick="showPage('single-page', this)">Single</div>
+        <div class="nav-link" onclick="showPage('vip-page', this)">VIP</div>
+        <div class="nav-link" onclick="showPage('archive-page', this)">Archive</div>
+    </nav>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyCaxtK-nF9gEQlstxLzAZo86TpUs7qAG74",
+        authDomain: "greentips-b81b2.firebaseapp.com",
+        databaseURL: "https://greentips-b81b2-default-rtdb.firebaseio.com",
+        projectId: "greentips-b81b2",
+        appId: "1:202069932953:web:a42c5177990b784b873108"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    db.ref('tips').on('value', snap => {
+        const data = snap.val() || {};
+        const containers = { free: '', single: '', vip: '', archive: '' };
+        
+        Object.keys(data).reverse().forEach(id => {
+            const c = data[id];
+            const isPending = c.status === 'pending';
+            const isLocked = isPending && c.type !== 'free';
+
+            let mHtml = c.matches.map(m => `
+                <div class="match-row">
+                    <span class="m-name">${m.match}</span>
+                    <span class="m-pick">${m.pick}</span>
+                    <span class="m-odds">${m.odds}</span>
+                </div>`).join('');
+
+            const html = `
+                <div class="ticket">
+                    <div class="ticket-header"><span>${c.date}</span><span>${c.matches.length} GAMES</span></div>
+                    <div style="${isLocked ? 'filter:blur(15px); opacity:0.05' : ''}">${mHtml}</div>
+                    ${isLocked ? `<div class="lock-box"><div class="vip-odds-preview">${c.totalOdds} ODDS</div><div style="font-size:2rem">🔒</div></div>` : ''}
+                    <div class="total-odds-bar">
+                        ${!isPending ? `<span style="float:left; color:${c.status==='WIN'?'#00ff41':'#ff4444'}">${c.status}</span>` : ''}
+                        TOTAL ODDS: <span>${c.totalOdds}</span>
+                    </div>
+                </div>`;
+
+            if(isPending) { if(containers[c.type] !== undefined) containers[c.type] += html; }
+            else { containers.archive += html; }
+        });
+        
+        document.getElementById('free-list').innerHTML = containers.free;
+        document.getElementById('single-list').innerHTML = containers.single;
+        document.getElementById('vip-list').innerHTML = containers.vip;
+        document.getElementById('archive-list').innerHTML = containers.archive;
+    });
+
+    function showPage(id, el) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+        el.classList.add('active');
+    }
+</script>
+</body>
+</html>
